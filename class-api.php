@@ -50,6 +50,16 @@ class BB_WP_API {
 	 * @access private
 	 */
 	private $actionname = 'bb_wp_api_port';
+	
+	/**
+	 * bootstrap_data
+	 * 
+	 * static vars passed to backbone
+	 * 
+	 * @var array
+	 * @access private
+	 */
+	private $bootstrap_data = array();
 		
 	/**
 	 * errors
@@ -94,9 +104,14 @@ class BB_WP_API {
 	
 		/* start listening on ajax port */
 		add_action ( 'wp_ajax_' . $this->actionname, array($this,'listen') );
+		add_action ( 'wp_ajax_nopriv_' . $this->actionname, array($this,'listen') );
 	
 		/* adds js backbone extension and passes some vars to */
 		add_action ( 'wp_enqueue_scripts', array($this,'register_javascript') );
+		
+		/* create the metadata for attachments */
+/* 		add_action ( 'bb_wp_api_after_create_attachment', array($this,'generate_attachment_metadata'), 10, 2 ); */
+		
 	}
 	
 	/**
@@ -111,14 +126,22 @@ class BB_WP_API {
 	public function register_javascript() {
 			
 		/* backbone js extension */
-		wp_enqueue_script( 'bb-wp-api', plugins_url( '/bb-wp-api.js' , BB_WP_API_FILE ) ,  array( 'jquery', 'backbone') );
+		wp_enqueue_script( 'belT', plugins_url( '/belt.js' , BB_WP_API_FILE ) ,  array( 'jquery', 'backbone') );
 		
 		/* set some public vars for being accessable in bb */
 		$java_vars =  array( 
 						'ajaxUrl' 			=> admin_url( 'admin-ajax.php'),
 						'action'			=> $this->actionname
-					  );	
-		wp_localize_script( 'backbone', 'bbWpApiExternalVars_' . $this->id , $java_vars);  		
+					  );
+					  
+		/* include bootstrapdata if any set */
+		if($this->bootstrap_data) {
+			foreach ($this->bootstrap_data as $name => $record) {
+				$java_vars[$name] = $record;			
+				
+			}
+		}			  	
+		wp_localize_script( 'backbone', 'belTExternalVars_' . $this->id , $java_vars);  		
 	}
 	
 	/**
@@ -126,7 +149,7 @@ class BB_WP_API {
 	 *
 	 * waiting for ajax requests
 	 * make checks, 
-	 * load the handler for the model_id sent in the request
+	 * load the handler for the handler sent in the request
 	 * let handler do the work and parse the response
 	 * return a reponse
 	 * 
@@ -135,21 +158,20 @@ class BB_WP_API {
 	 * @return void
 	 */
 	public function listen() {			
-		
 		/* get values from request */
 		$method 	= $_REQUEST['method']; // get, creat, update or delete
-		$model_Id 	= $_REQUEST['model_Id']; // id to select the corresponding handler class
+		$handler 	= $_REQUEST['handler']; // id to select the corresponding handler class
 		$model 		= $_REQUEST['model']; // the data
 		
 		/* clean up */
-		unset($_REQUEST['model_Id']); //dont need anymore
+		unset($_REQUEST['handler']); //dont need anymore
 		
 		/* validation */
 		if( ! $this->_is_valid_method($method))
 			$this->set_error( 1, 'No valid method in response header' );
 			
 		/* gets an handler or throws an error		 */
-		$handler = $this->_maybe_get_valid_handler($model_Id);
+		$handler = $this->_maybe_get_valid_handler($handler);
 							
 		/* all tests passed, now call the handler */
 		if( ! $this->get_errors() ) {
@@ -174,13 +196,12 @@ class BB_WP_API {
 			}
 			
 			// successful reponse being sent
-			$handler->send_response();
-	
+			$handler->send_response();	
 					
 		} else {
 		
 			/* send error object from the api */
-			wp_send_json( array('errors' => $this->get_errors()) );
+			wp_send_json_error( $this->get_errors()) ;
 		}
 	}	
 
@@ -215,6 +236,28 @@ class BB_WP_API {
 	}
 	
 	/**
+	 * set_bootstrap_data function.
+	 * 
+	 * performs an api call on page load and passes it to backbone
+	 * therefore no initial ajax call is needed to load models at backbone on pageload
+	 *
+	 * @access public
+	 * @param string name // a name to identify the data
+	 * @param string $handler // backbone modelname identifier
+	 * @param int $database_id // the wp database id
+	 * @return void
+	 */
+	public function set_bootstrap_data($name, $handler, $database_id = NULL ) {
+	
+		$handler = $this->_maybe_get_valid_handler($handler);
+		if($this->get_errors())
+			return false;
+/* 		$handler->set_request(array('queryvars' => array('posts_per_page' => 1)));		 */
+		$handler->read($database_id);					
+		$this->bootstrap_data[$name] = $handler->get_response( array('json' => false) );
+	}
+	
+	/**
 	 * set_error function.
 	 * 
 	 * @access protected
@@ -240,17 +283,17 @@ class BB_WP_API {
 	 * _maybe_get_valid_handler function.
 	 * 
 	 * @access private
-	 * @param mixed $model_Id
+	 * @param mixed $handler
 	 * @return void
 	 */
-	private function _maybe_get_valid_handler( $model_Id ) {
+	private function _maybe_get_valid_handler( $handler ) {
 		
 		/* convert the name */
-		$handlerclassname = self::model_Id_to_handler_classname($model_Id); 
+		$handlerclassname = self::handler_to_handler_classname($handler); 
 
 		/* try if we got a real name for a class */
 		if( ! class_exists($handlerclassname) ) {
-			$this->set_error( 2, 'the passed model_Id is not supported by the server' );
+			$this->set_error( 2, 'the passed handler is not supported by the server' );
 			return false;
 		}
 
@@ -259,7 +302,7 @@ class BB_WP_API {
 		
 		/* check if the instance is really a handler */
 		if( ! $instance instanceof BB_WP_API_Handler  ) {
-			$this->set_error( 2, 'The passed model_Id doesnt have a corresponding handler class' );
+			$this->set_error( 2, 'The passed handler doesnt have a corresponding handler class' );
 			return false;		
 		}
 		
@@ -279,18 +322,18 @@ class BB_WP_API {
 	}
 	
 	/**
-	 * model_Id_to_handler_classname function.
+	 * handler_to_handler_classname function.
 	 * 
-	 * convert the js model_Id to the hanler classname
+	 * convert the js handler to the hanler classname
 	 *
 	 * @access public
 	 * @static
 	 * @param mixed $handler_id
 	 * @return string
 	 */
-	public static function model_Id_to_handler_classname( $model_Id ) {
+	public static function handler_to_handler_classname( $handler ) {
 		
-		return  self::_id_to_handler_classname( $model_Id, 'BB_WP_API_Handler_' );		
+		return  self::_id_to_handler_classname( $handler, 'BB_WP_API_Handler_' );		
 	}	
 
 	/**
@@ -355,5 +398,24 @@ class BB_WP_API {
 		$page_url = preg_replace('/([^?]+)\?[^?]*/', '$1', $page_url); // remove all after the ?
 
 		return esc_url($page_url);
+	}
+	
+	/**
+	 * generate_attachment_metadata function.
+	 *
+	 * @category action hook callback 
+	 * @access public
+	 * @param mixed $new_id
+	 * @param mixed $url
+	 * @return void
+	 */
+	public function generate_attachment_metadata($new_id, $url) {
+	
+		// you must first include the image.php file
+		// for the function wp_generate_attachment_metadata() to work
+		require_once( ABSPATH . 'wp-admin/includes/image.php' );
+		$attach_data = wp_generate_attachment_metadata( $new_id, $url );
+		wp_update_attachment_metadata( $new_id, $attach_data );
+		
 	}
 }
