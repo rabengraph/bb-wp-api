@@ -89,7 +89,7 @@ abstract class BB_WP_API_Handler_Data_Package {
  */
 class BB_WP_API_Handler_Data_Package_Postmeta extends BB_WP_API_Handler_Data_Package {
 	
-	protected $modelclasses = array('post', 'attachment');
+	protected $modelclasses = array('post');
 	
 	/**
 	 * read function.
@@ -150,7 +150,7 @@ class BB_WP_API_Handler_Data_Package_Postmeta extends BB_WP_API_Handler_Data_Pac
  */
 class BB_WP_API_Handler_Data_Package_Author extends BB_WP_API_Handler_Data_Package {
 	
-	protected $modelclasses = array('post', 'comment', 'user', 'attachment');
+	protected $modelclasses = array('post', 'comment');
 	
 	/**
 	 * read function.
@@ -166,7 +166,7 @@ class BB_WP_API_Handler_Data_Package_Author extends BB_WP_API_Handler_Data_Packa
 		$author = array();	
 		if ( $object instanceof WP_Post ) 
 			$id = $object->post_author;			
-		elseif ( isset($object->comment_ID )) // a WP Comment 
+		elseif ( $object instanceof WP_Comment ) 
 			$id = $object->user_id;
 		elseif ( $object instanceof WP_User ) 
 			$id = $object->ID;			
@@ -174,10 +174,6 @@ class BB_WP_API_Handler_Data_Package_Author extends BB_WP_API_Handler_Data_Packa
 			$id = absint($object);
 		else
 			return array(); // exit
-		
-		
-		//@TODO doesnt go through by comments
-		
 		
     	$avatar =  str_replace("avatar ", "avatar media-object pull-left ", get_avatar( $id, 32 ));	
 	    $author['ID'] = $id;
@@ -196,7 +192,7 @@ class BB_WP_API_Handler_Data_Package_Author extends BB_WP_API_Handler_Data_Packa
  */
 class BB_WP_API_Handler_Data_Package_Cap extends BB_WP_API_Handler_Data_Package {
 	
-	protected $modelclasses = array('post', 'comment', 'attachment');
+	protected $modelclasses = array('post', 'comment');
 	
 	/**
 	 * read function.
@@ -214,20 +210,21 @@ class BB_WP_API_Handler_Data_Package_Cap extends BB_WP_API_Handler_Data_Package 
 		        $permissions['edit'] = ( current_user_can( 'edit_post', $object->ID ) ) ? 1 : 0 ;
 		        $permissions['delete'] = ( current_user_can( 'delete_post', $object->ID ) ) ? 1 : 0 ;
 	    }	    
-	    if ( isset($object->comment_ID ) ) { // a comment
-		    //@TODO better
-			$comment_author = $object->user_id;
-				$permissions['edit'] = ( $comment_author == wp_get_current_user()->ID ) ? 1 : 0;
-				$permissions['delete'] = ( $comment_author == wp_get_current_user()->ID ) ? 1 : 0;
+	    if ( $object instanceof WP_Comment ) {
+		    //TODO
 	    }
 	   return $permissions;	
 	}
 }
 
-
-class BB_WP_API_Handler_Data_Package_Nonces extends BB_WP_API_Handler_Data_Package {
+/**
+ * BB_WP_API_Handler_Data_Package_Imagesize class.
+ * 
+ * @extends BB_WP_API_Handler_Data_Package
+ */
+class BB_WP_API_Handler_Data_Package_Imagesize extends BB_WP_API_Handler_Data_Package {
 	
-	protected $modelclasses = array('post', 'attachment', 'comment');
+	protected $modelclasses = array('post');
 	
 	/**
 	 * read function.
@@ -240,73 +237,10 @@ class BB_WP_API_Handler_Data_Package_Nonces extends BB_WP_API_Handler_Data_Packa
 	 */
 	public function read($object) {
 		
-    	$nonces = array();
+    	$sizes = array();
 		if ( $object instanceof WP_Post ) {
-		    $nonces['nonce_delete'] = wp_create_nonce( 'delete' . $object->ID );
-		    $nonces['nonce_create'] = wp_create_nonce( 'create' . $object->ID );
-		    $nonces['nonce_update'] = wp_create_nonce( 'update' . $object->ID );		    
+		    $sizes['thumburl'] = wp_get_attachment_thumb_url($object->ID);
 		}
-	    return $nonces;
+	    return $sizes;
 	}
 }
-
-
-class BB_WP_API_Handler_Data_Package_Embedder extends BB_WP_API_Handler_Data_Package {
-	
-	protected $modelclasses = array('attachment');
-
-	public function read($object) {
-		$array = array();
-		
-		$mime = $object->post_mime_type;
-		$icon = wp_mime_type_icon($mime);
-		$metadata = wp_get_attachment_metadata( $object->ID );
-		$embed = '';
-		$html = '';
-		
-		$type = (wp_attachment_is_image($object->ID )) ? 'image' : 'misc';
-		$frame = ($type =='image') ? "image" : "inline";
-		
-		switch($type) {
-			case('misc'):
-				$embed = '<embed class="media" src="' . $object->guid . '">';
-				$html = '<a href="#" class="magnific"><img src="' . $icon .'"></a>';						
-
-			break;
-			case('image'):
-				$embed = '';
-				$html = '<a href="#" class="magnific"><img src="' . wp_get_attachment_thumb_url($object->ID) .'"></a>';						
-			break;
-			
-		}
-		$array['type'] = $type;
-		$array['html'] = $html;		
-		$array['embed'] = $embed;
-		$array['frame'] = $frame;
-
-		return $array;
-	}
-	
-}
-
-class BB_WP_API_Handler_Data_Package_Loginuser_Meta extends BB_WP_API_Handler_Data_Package {
-	
-	protected $modelclasses = array('idone');
-
-	public function read($id, $data = array() ) {
-
-	/* try to login */
-
-	    $user_signon = wp_signon( $data, false );
-	    
-	    if ( is_wp_error($user_signon) ) {
-	    	return $user_signon;	    
-	    } else {
-		    return array('user_login' => 'ok');
-	    }
-	    
-	    // no return on update, only errors
-		
-	}	
-}
-

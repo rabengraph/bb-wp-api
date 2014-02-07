@@ -17,18 +17,11 @@ class BB_WP_API_Handler_Comment extends BB_WP_API_Handler {
 	public function register_data($register) {
 	
 		$register->modelclass('comment');
-		
-		
-		$register->data_package('author');
-		$register->data_package('cap');
-		$register->data_package('nonces');
-		
-		
-		$register->field_id('id', 'comment_ID', 'comment');		
-		$register->field_parent_id('parentId', 'comment_post_ID', 'comment');		
 
+		$register->field_id('id', 'comment_ID', 'comment');
 		$register->field('content', 'comment_content', 'comment');
 		$register->field('date', 'comment_date', 'comment', array('readonly' => true ));
+		$register->field('parentId', 'comment_post_ID', 'comment');		
 		$register->field('authorName', 'display_name', 'author');
 		$register->field('authorAvatar', 'avatar', 'author');	
 		$register->field('permissionEdit', 'edit', 'cap');
