@@ -20,11 +20,23 @@ class BB_WP_API_Handler_Review extends BB_WP_API_Handler_Abstract_Post {
 		
 		parent::register_data($register);
 		
-		$register->field('content', 'post_content', 'post');
 		$register->field('progress', 'progress', 'postmeta');
 		$register->field('associatedUrl', 'associated_url', 'postmeta', array('validate' => 'esc_url'));
 		$register->field('left', 'left', 'postmeta');
 		$register->field('top', 'top', 'postmeta');
+	}
+	
+	/**
+	 * filter_found_item function.
+	 * 
+	 * @access protected
+	 * @return void
+	 */
+	protected function filter_found_item($object) {
+	
+		/* escape content */
+		$object->post_content = wp_kses_post( $object->post_content );		
+		return $object;
 	}
 	
 	/**
@@ -88,29 +100,32 @@ class BB_WP_API_Handler_Review extends BB_WP_API_Handler_Abstract_Post {
 		/* single review */
 		if($this->id) {
 		
-			$review = $return['model'];
+			$review = $return;
 			$review = $this->_append_comments_and_attachments($review);
-			$return['model'] = $review;
+			$return = $review;
 		
 		/* if all models are requested	 */
 		} else {
 		
-			$reviews = $return['model'];
+			$reviews = $return;
 			$appended_reviews = array();	
 			foreach ($reviews as $review) {
 				$appended_reviews[] = $this->_append_comments_and_attachments($review);			
 			} 
-			$return['model'] = $appended_reviews;	
+			$return = $appended_reviews;	
 		}
 		
 		/* send the current user */
 		/* this part is a little hack, like this the current user is sent too */
+		
+/*
 		$user_handler = new BB_WP_API_Handler_Data_Package_Author;
 		$current_userdata = $user_handler->read(wp_get_current_user());
 		$data[]['author'] = $current_userdata;
 		$current_userdata = $this->model_response_parser($data, $this->properties->data_package_fields);
-		$return['currentUser'] = $current_userdata;
+		$return['currentUser'] = $current_userdata[0];
 		
+*/
 		return $return;		
 	}
 	
@@ -118,7 +133,7 @@ class BB_WP_API_Handler_Review extends BB_WP_API_Handler_Abstract_Post {
 	 * _append_comments_and_attachments function.
 	 * 
 	 * helper
-	 * adds comments and attachments of the review to the review
+	 * adds comments and attachments to the review
 	 *
 	 * @access protected
 	 * @param mixed $review

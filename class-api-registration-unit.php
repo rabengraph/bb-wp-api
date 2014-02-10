@@ -44,7 +44,8 @@ class BB_WP_API_Registration_Unit {
 		'modelclass' 			=> '',
 		'id_attribute'			=> 'ID',
 		'custom_data_packages'	=> array(),
-		'data_package_fields'	=> array()
+		'data_package_fields'	=> array(),
+		'access'				=> "loggedin"
 	);
 	
 	
@@ -68,7 +69,7 @@ class BB_WP_API_Registration_Unit {
 	 */
 	public function modelclass( $modelclass ) {	
 		if( in_array( $modelclass, $this->modelclasses ))
-			$this->properties->modelclass = $modelclass; 	
+			$this->properties->modelclass = $modelclass; 
 	}
 
 	/**
@@ -139,6 +140,47 @@ class BB_WP_API_Registration_Unit {
 		if($registered) {
 			$this->properties->id_attribute =  esc_attr($id_backbone);
 		}	
+	}
+		
+	/**
+	 * field_parent_id function.
+	 * 
+	 * register the model parent id attribute
+	 *
+	 * @access public
+	 * @final
+	 * @param mixed $id_backbone
+	 * @param mixed $id_wp
+	 * @param mixed $data_package
+	 * @param mixed $options (default: NULL)
+	 * @return void
+	 */
+	public final function field_parent_id( $id_backbone, $id_wp, $data_package, $options = NULL) {
+		
+		$registered = $this->field($id_backbone, $id_wp, $data_package, $options = NULL);	
+		
+		/* set the ID Attribute */
+		if($registered) {
+			$this->properties->parent_id_attribute =  esc_attr($id_backbone);
+		}	
+	}
+
+	/**
+	 * access function.
+	 * 
+	 * api accessable for logged in users only or for all
+	 *
+	 * @access public
+	 * @final
+	 * @param mixed $access
+	 * @return void
+	 */
+	public final function access( $access ) {
+		
+		$access_whitelist = array('loggedin', 'all');
+		if(in_array($access, $access_whitelist)) {
+			$this->properties->access = $access;		
+		}
 	}
 	
 	/**

@@ -23,16 +23,20 @@ abstract class BB_WP_API_Handler_Abstract_Post extends BB_WP_API_Handler {
 		$register->data_package('postmeta');
 		$register->data_package('author');
 		$register->data_package('cap');
-		$register->data_package('imagesize');
-
+		$register->data_package('nonces');
 		
 		$register->field_id('id', 'ID', 'post');
 		$register->field('title', 'post_title', 'post', array('validate' => 'esc_attr'));
+		$register->field('content', 'post_content', 'post');
 		$register->field('date', 'post_date', 'post', array('readonly' => true ));
 		$register->field('authorName', 'display_name', 'author');
 		$register->field('authorAvatar', 'avatar', 'author');	
 		$register->field('permissionEdit', 'edit', 'cap');
 		$register->field('permissionDelete', 'delete', 'cap');
+		$register->field('nonceDelete', 'nonce_delete', 'nonces');
+		$register->field('nonceCreate', 'nonce_create', 'nonces');
+		$register->field('nonceUpdate', 'nonce_update', 'nonces');
+
 	}
 	
 	/**

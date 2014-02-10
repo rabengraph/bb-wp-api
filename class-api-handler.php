@@ -1,14 +1,23 @@
 <?php
 
 
+/* a helper class for registering custom API Handler */
 require_once ( BB_WP_API_PATH .  '/class-api-registration-unit.php');
+
+/* load the default package handlers */
 require_once ( BB_WP_API_PATH .  '/class-api-data-package-handler.php');
+
+/* custom custom API Handler, the are all extensions of this abstrat class */
 require_once ( BB_WP_API_PATH .  '/api-handler/class-api-handler-abstract-post.php');
 require_once ( BB_WP_API_PATH .  '/api-handler/class-api-handler-review.php');
 require_once ( BB_WP_API_PATH .  '/api-handler/class-api-handler-attachment.php');
 require_once ( BB_WP_API_PATH .  '/api-handler/class-api-handler-comment.php');
+require_once ( BB_WP_API_PATH .  '/api-handler/class-api-handler-user.php');
+require_once ( BB_WP_API_PATH .  '/api-handler/class-api-handler-loginuser.php');
 
- 
+
+
+
 /**
  * Abstract BB_WP_API_Handler class.
  * 
@@ -63,25 +72,28 @@ abstract class BB_WP_API_Handler {
 	 * whitelist for supported modelclasses
 	 * post represents wp posttype
 	 * comment represents a wp comment
+	 * user represents a WP_User
+	 * attachment is a wp post with an url 
+	 * idone is a special modelclass, without an id (id-one) and without a core data package, for experimental use only
 	 *
 	 * those cant be extended by a child class
 	 * 
 	 * @var array
 	 * @access private
 	 */
-	private $modelclasses = array('post', 'comment');	
+	private $modelclasses = array('post', 'comment', 'user', 'attachment', 'idone');	
 	
 	/**
 	 * core_data_packages
 	 * 
-	 * the handling of those 2 datapackages in hardcoded
+	 * the handling of those 3 datapackages in hardcoded
 	 * distinguish modelclass and core data packages:
-	 * the modelclass is thr overall object, a modelclass contains various data packages, the core data packages are such
+	 * the modelclass is the overall object, a modelclass contains various data packages, the core data packages are such
 	 * 
 	 * @var array
 	 * @access protected
 	 */
-	protected $core_data_packages = array('post', 'comment');
+	protected $core_data_packages = array('post', 'comment', 'user');
 	 
 	/**
 	 * request
@@ -108,7 +120,8 @@ abstract class BB_WP_API_Handler {
 	/**
 	 * request_query_vars
 	 * 
-	 * query vars from backbone collection, fetch
+	 * query vars sent from backbone collection fetch call
+	 * in the same format as WP_Query args
 	 * 
 	 * @var array
 	 * @access protected
@@ -131,12 +144,22 @@ abstract class BB_WP_API_Handler {
 	 * id
 	 * 
 	 * when there is an id sent in the request it is stored here
-	 * this id represents the id of the model stored in the database
+	 * this id represents the id of the "model" stored in the database
 	 * 
-	 * @var int
+	 * @var int | string
 	 * @access protected
 	 */
 	protected $id = 0;
+	
+	/**
+	 * parent_id
+	 * 
+	 * some modelclasses like attachments or comments require a parent post to be registered
+	 * 
+	 * @var int
+	 * @access public
+	 */
+	protected $parent_id = 0;
 	 
 	/**
 	 * parsed_model_request
@@ -152,18 +175,18 @@ abstract class BB_WP_API_Handler {
 	/**
 	 * query
 	 * 
-	 * the database results for models are stored
+	 * the database results for models are stored here
 	 * used for read requests 
 	 *
 	 * @var array
 	 * @access protected
 	 */
-	protected $query;
+	protected $query = array();
  	 
 	/**
 	 * parsed_model_response
 	 * 
-	 * parsed model from query, ready for sending to backbone 
+	 * parsed model is stored here, ready for sending to backbone 
 	 *
 	 * @var array
 	 * @access protected
@@ -184,7 +207,8 @@ abstract class BB_WP_API_Handler {
 	 * current_user
 	 *
 	 * the current wp user
-	 * 
+	 *
+	 * @depreciated 
 	 * @var WP_User
 	 * @access protected
 	 */
@@ -211,10 +235,10 @@ abstract class BB_WP_API_Handler {
 	public function __construct($request = NULL) {
 	 		  
 	 	/* 
-	 	 * register all data for the handler from the child class
+	 	 * register all data for the handler from the extended class
 	 	 *		
 	 	 * this class handles all settings to be registered from the Extended Handler Class
-		 * it will be insanized on construct and destroyed immediatly after registration
+		 * the registration unit will be instanceld on construct and destroyed immediatly after registration
 	 	 */	 
 	 	
 	 	/* make an object that handles registration	  */
@@ -240,20 +264,21 @@ abstract class BB_WP_API_Handler {
 
 	 	/* 
 	 	 * error checking	
-	 	 * send the response with an rerror message right away if something happend already so far
 	 	 */
 	 	 
 	 	/* a valid  modelclass is rerquired */
 	 	if( ! $this->properties->modelclass )
 			$this->set_error( 55, 'no valid modelclass registered' );			
-		
-		/* send error response right away	 */
-		if($this->get_errors())
-			$this->send_response();
-		
+	 		
+	 	/* is the uer allowed to make this request  */
+	 	if ( ( $this->properties->access == "loggedin" ) && ( ! is_user_logged_in() ) ) {
+			$this->set_error( 56, 'user must be logged in for this request' );				 	
+	 	}
+	 	
 		/* request can be set as an constructor argument or via the setter */
 	 	if($request)
-	 		$this->set_request($request);		 
+	 		$this->set_request($request);
+			 
 	}
 
 
@@ -275,13 +300,19 @@ abstract class BB_WP_API_Handler {
 	 	
 	 	/* set vars from the server request */
 		$this->request = $request;
-		$this->request_method = $request['method']; 
-		$this->request_url = esc_url($request['requesturl']);
+		
+		/* extracts the method, but this is not really importand to do at this point, as it will be set later too */
+		/* $this method is also set when the corresponding action ($this-read, create, ...) is called */
+		if( isset($request['method']))
+			$this->request_method = $request['method'];
+		
+		/* extract query vars */
 		if( isset($request['queryvars']))
 			$this->request_query_vars = (array) $request['queryvars']; // array is expected
-		/* set the id of the model when we have one */
-		if ( isset($request['model'][$this->properties->id_attribute]) )
-			$this->id = absint($request['model'][$this->properties->id_attribute]);
+
+		/* looking for model ids in the request */
+		$this->id = $this->_find_in_request($this->properties->id_attribute);
+		$this->parent_id = $this->_find_in_request($this->properties->parent_id_attribute);	
 	}	
 	
 	/**
@@ -309,10 +340,55 @@ abstract class BB_WP_API_Handler {
 	public function get_errors() {
 		return $this->errors->get_error_messages();
 	}
-
+	
+	
+	/**
+	 * merge_errors function.
+	 * 
+	 * merges a new WP_Error with the classes WP_Error
+	 * merge is done very loosly, but it works for the purpose of the class
+	 *
+	 * @access public
+	 * @param WP_Error $wp_error
+	 * @return void
+	 */
+	public function merge_errors($wp_error) {
+		$new_errors = $wp_error->get_error_messages();
+		foreach ($new_errors as $code => $message) {
+			$this->errors->add($code, $message);		
+		}			    
+	}
 	/* ===============
 	   MAIN CONTROLLER
 	   =============== */
+	   
+	   
+	/**
+	 * action function.
+	 * 
+	 * a wrapper method for create, update, read, delete
+	 *
+	 * @access public
+	 * @return void
+	 */
+	public function action() {
+		if( ! $this->request_method )
+			return false;
+		switch ($this->request_method) {
+			case 'read':
+				$this->read();					
+			break;				
+			case 'create':	
+				$this->create();					
+			break;
+			case 'update':
+				$this->update();					
+			break;
+			case 'delete':
+				$this->delete();					
+			break;
+		}
+	}
 	
 	/**
 	 * read function.
@@ -324,16 +400,28 @@ abstract class BB_WP_API_Handler {
 	 * @access public
 	 * @return void
 	 */
-	public function read(){
+	public function read( $id = null ){
+		if($this->get_errors())
+			return;
 		
+		/* set method */
+		$this->request_method = 'read';
+		
+		/* read the data from backbone */
+		$this->parse_model_request();
+		
+		/* set id */
+		if($id)
+			$this->id = $id;
+			
 		/* call the database query */
 		if($this->id) 
-			$this->_query_single();
+			$query = $this->_query_single();
 		else
-			$this->_query_all();
+			$query = $this->_query_all();
 					
 		/* format the retrieved models */
-		$this->parse_model_response();	
+		$this->parse_model_response($query);	
 	}
 	 
 	/**
@@ -349,19 +437,24 @@ abstract class BB_WP_API_Handler {
 	 * @return void
 	 */
 	public function create() {
-		
+		if($this->get_errors())
+			return;
+			
+		/* set method */
+		$this->request_method = 'create';
+				
 		/* check for a model id */
 		if( $this->id) {
-			$this->set_error( 4, 'A model id in request, cant create a new item on server' );
+			$this->set_error( 4, 'A model id is set in the request, cant create a new item on server' );
 			return;			
 		}
 		
 		/* read the data from backbone */
 		$this->parse_model_request();
-		
+
 		/* get the parsed post data from request */
 		$item_data = $this->parsed_model_request;
-		
+
 		/* privileg checking @TODO outsource to filter */
 		if( ! current_user_can('edit_posts')) {  // TODO improve CPT
 			$this->set_error( 9, 'no user privileges to save the item on server' );
@@ -385,16 +478,33 @@ abstract class BB_WP_API_Handler {
 				/* got the id of the created post */
 				$new_id = $result;	
 			break;
+
+			case('attachment'):
+				//@TODO
+				$attachment = $item_data['post'];	
+				
+				/* a post parent for a attachment must be set */			
+				if( ! $this->parent_id ) {
+					$this->set_error( 7, 'the attachment has no parent id' );
+					return;
+				}
+				
+				/* upload the file ($_FILE) and attach it to the parent post			 */
+				$new_id = media_handle_upload('async-upload', $this->parent_id, $attachment);		
+			break;
 			
 			/* comment */
 			case('comment'):
 				$comment = $item_data['comment'];
 
 				/* a post parent for a comment must be set */			
-				if( ! $comment['comment_post_ID'] ) {
+				if( ! $this->parent_id ) {
 					$this->set_error( 7, 'the comment has no parent id' );
 					return;
 				}
+				
+				/* in some odd cases it maybe that the parent id is not yet present in the comment array */
+				$comment['comment_post_ID'] = $this->parent_id;
 				
 				$result = wp_insert_comment($comment);
 				
@@ -406,6 +516,12 @@ abstract class BB_WP_API_Handler {
 				
 				/* got the id of the created comment */
 				$new_id = $result;
+			break;
+			case('user'):
+			//@TODO
+			break;
+			case('idone'):
+				$new_id = $this->id; // interacting with the databse is outsourced to the data package handlers			
 			break;
 		}	
 		
@@ -426,7 +542,12 @@ abstract class BB_WP_API_Handler {
 	 * @return void
 	 */
 	public function update(){
-		
+		if($this->get_errors())
+			return;
+			
+		/* set method */
+		$this->request_method = 'update';
+				
 		/* check for a model id */
 		if( ! $this->id) {
 			$this->set_error( 10, 'No model id in request, cant update' );
@@ -444,6 +565,7 @@ abstract class BB_WP_API_Handler {
 		
 			/* posts */
 			case('post'):
+			case('attachment'):
 				$post = $item_data['post'];
 				
 				/* privileg check */
@@ -475,9 +597,17 @@ abstract class BB_WP_API_Handler {
 			case('comment'):
 				$comment = $item_data['comment'];
 				
-				/* comments cant be updated */
+				/* comment updateding is not supported */
 				$this->set_error( 13, 'comments cant be updated!' );
 					return; 
+			break;
+			case('user'):
+			//@TODO
+			break;
+			case('idone'):
+				$new_id = $this->id;
+				$this->_action_custom_package_data( $new_id, $item_data);					
+				$this->parse_model_response($new_id);			
 			break;
 		}	
 	}
@@ -492,7 +622,12 @@ abstract class BB_WP_API_Handler {
 	 * @return void
 	 */
 	public function delete(){
-		
+		if($this->get_errors())
+			return;
+			
+		/* set method */
+		$this->request_method = 'delete';
+				
 		/* check for id */
 		if( ! $this->id) {
 			$this->set_error( 14, 'No model id in request, cant delete' );
@@ -510,6 +645,7 @@ abstract class BB_WP_API_Handler {
 		
 			/* posts */
 			case('post'):
+			case('attachment'):
 				$post = $item_data['post'];
 				
 				/* privileg check */
@@ -535,10 +671,11 @@ abstract class BB_WP_API_Handler {
 			/* comment */
 			case('comment'):
 				$comment = $item_data['comment'];
-				
 				/* @TODO better permission handling */
-				if ( $comment['user_id'] != $this->current_user->id ) {
-					$this->set_error( 17, 'This comment can only be deleted by the author' );
+					$comment_in_db = get_comment( $this->id );
+					$comment_author = $comment_in_db->user_id;
+				if ( $comment_author != $this->current_user->ID ) {
+					$this->set_error( 17, 'This comment can only be deleted by the comment author :' . $comment_author );
 					return;	
 				}
 				$result = wp_delete_comment($this->id);
@@ -552,28 +689,36 @@ abstract class BB_WP_API_Handler {
 				/* setup a clean response */	
 				$this->parse_model_response($result);	
 			break;
+			case('user'):
+			//@TODO
+			break;
+			case('idone'):
+				$new_id = $this->id;
+				$this->_action_custom_package_data( $new_id, $item_data);					
+				$this->parse_model_response($new_id);			
+			break;
 		}	
 	}
 
 	/**
-	 * send_response function.
+	 * get_response function.
 	 * 
-	 * finally sends back the respone to wp and terminates the class
+	 * get the full response that will be sent to the server
 	 * 
 	 * @access public
 	 * @return void
 	 */
-	public function send_response() {
+	public function get_response($options = array('json' => false) ) {
 
 		/* collect the response in an array ... */
 		$return = array();
 		
-		/* access the response prepared model response by the main controllers ($this->read, $this->create, ...) */
-		$return['model'] = $this->parsed_model_response;
-		
+		/* access the prepared model response by the main controllers ($this->read, $this->create, ...) */
+		$return = $this->parsed_model_response;
+					
 		/* add errors to the response if we have any */
 		if($this->get_errors())
-			$return['errors'] = $this->get_errors();	
+			$return = $this->get_errors();	
 		
 		/* when debug is on send the whole instance */
 		if($this->debugger) {
@@ -581,13 +726,35 @@ abstract class BB_WP_API_Handler {
 			die(); 	
 		}
 		
-		/* allow a filter to change / add the response */
+		/* allow a filter to change or add stuff to the response */
 		$return = $this->filter_response($return);
 		
-		/* send it and terminate this instance */
-		wp_send_json($return);
+		/* get through the output options */
+		if($options['json']) 
+			return json_encode($return);
+		else 
+			return $return;
+	}
 	
-	}	 
+	/**
+	 * send_response function.
+	 * 
+	 * finally sends back the respone to wp and terminates the class
+	 * 
+	 * @access public
+	 * @return void
+	 */	
+	public function send_response() {
+	
+		$return = $this->get_response();
+		
+		/* send it and terminate this instance */
+		if($this->get_errors()) {
+			wp_send_json_error($return);						
+		} else {
+			wp_send_json_success($return);			
+		}
+	} 
 	
 	/* ===============
 	   FILTER
@@ -635,6 +802,19 @@ abstract class BB_WP_API_Handler {
 	protected function filter_query_args($queryargs) {
 		return $queryargs;
 	}
+	
+	/**
+	 * filter_found_item function.
+	 * 
+	 * use this filter for escaping the output
+	 *
+	 * @access protected
+	 * @param mixed $object
+	 * @return void
+	 */
+	protected function filter_found_item($object) {
+		return $object;		
+	}
 
     /**
      * filter_response function.
@@ -667,7 +847,7 @@ abstract class BB_WP_API_Handler {
 	protected final function parse_model_request() {
 	    
 	    /* get the model from the request */
-	    $modeldata = $this->request['model'];
+	    $modeldata = (is_array($this->request['model'])) ? $this->request['model'] : array();
 	    /*
 	     *	looks something like this now:
 		 *	$modeldata = array(
@@ -680,7 +860,7 @@ abstract class BB_WP_API_Handler {
 	   	/* the formatting of the parsed output  */
     	$parsed = array();
     	
-    	/* get all data packages, also the core packages and parsse them */
+    	/* get all data packages, also the core packages and parse them */
 	   	$data_packages = array_merge($this->core_data_packages, $this->properties->custom_data_packages ); 
 	   	foreach ($data_packages as $data_package) {
 		   	$parsed[$data_package] = array();
@@ -695,32 +875,34 @@ abstract class BB_WP_API_Handler {
 		 *  );
 		 */
  
-    	/* get default values if some are set in the child handler*/
+    	/* get default values if some are set in the extended handler class */
      	$parsed = $this->filter_pre_parse_model_request($parsed, $this->request_method);
    	
      	/* start parsing */
 		foreach ($modeldata as $id_backbone => $value) {
 			
 			/* check if the data package field is registered */
-			/* only data_package_fields registered in backbone pass the gate */
+			/* only data_package_fields registered in backbone pass this gate */
 			if ( ! array_key_exists($id_backbone, $this->properties->data_package_fields) )
 				continue;
 				
 			// shorthand for data package fields
 			$field = $this->properties->data_package_fields[$id_backbone]; // any backbone key
 			$data_package = $field['data_package']; // the name of the package, e.g. 'post' or 'author'
-			$wp_id = $field['id']; // the wp key name, e.g. post_title, post_parent
-			
+			$wp_id = $field['id']; // the wp key name, e.g. post_title, post_parent		
 
 			/* some preprocessing */
 			if( isset($field['options']) ) {
-				/* this field is read only, so throw away */
+			
+				/* this field is read only, so throw it away, we ignore this value */
 				if( array_key_exists('readonly', $field['options']) && $field['options']['readonly'] )
 					continue;
 				
 				/* validate the data */
 				if( array_key_exists('validate', $field['options']) ) { 					
 					$validate_callback = $field['options']['validate'];
+					
+					/* execute the validation callback e.g. esc_attr(), esc_url(), .. */
 					if(function_exists($validate_callback))
 						$value = call_user_func ($validate_callback, $value);	
 				}			
@@ -760,19 +942,19 @@ abstract class BB_WP_API_Handler {
      * 
      * Controller Funtion
      * Prepare and format the model for sending back to backbone
-     * used for all requests, but essentially important for read requests, as other request only return the model id 
+     * used for all requests, but essentially important for read requests, as other request only return the model id by default
      * sets $this->parsed_model_response
      *
      * @access protected
      * @final
-     * @param null | array $data
+     * @param false | array $data
      * @return void
      */
     protected final function parse_model_response($data = NULL) {
-    
+    	$parsed = false;
 		switch ($this->request_method) {
 			case 'read':
-				$parsed = $this->parse_model_response_read();					
+				$parsed = $this->parse_model_response_read($data);					
 			break;				
 			case 'create':	
 				$parsed = $this->parse_model_response_create($data);					
@@ -784,6 +966,12 @@ abstract class BB_WP_API_Handler {
 				$parsed = $this->parse_model_response_delete($data);					
 			break;
 		}
+		
+		if($parsed === false) {
+			$this->set_error( 355, 'No response was parsed' );
+			return;	
+		}
+		
 		$this->parsed_model_response = $parsed;
     }   
       
@@ -801,14 +989,16 @@ abstract class BB_WP_API_Handler {
      */
     protected final function model_response_parser($items, $data_package_fields) {
     	$parsed = array();
+    	
     	/* iterate through all data pakages */
     	foreach ( $data_package_fields as $field ) {
-    		/* itereate through all passed query items */
+    	
+    		/* itereate through all passed items */
     		foreach ($items as $i => $item) {
 		   		$key = $field['backbone_id']; // the key specified at backbone, e.g. 'title'
 		   		$data_package_name = $item[$field['data_package']]; //the datapackage name, e.g. 'post'
 		   		
-		   		if ( is_array($data_package_name) ) // only for safty, its always an array
+		   		if ( is_array($data_package_name) ) // only for safety, its always an array anyway
 			   		$value = $data_package_name[$field['id']]; // the value e.g. 'my title'
 			   	elseif  ( is_object($data_package_name) )
 			   		$value = $data_package_name->$field['id'];
@@ -837,20 +1027,20 @@ abstract class BB_WP_API_Handler {
      * @access protected
      * @return array
      */
-    protected function parse_model_response_read() {
+    protected function parse_model_response_read($data) {
 	    
 	    /* access the unparsed query items  */
-	    $items = $this->query;
+/* 	    $items = $this->query; */
 	    /* error checks */
-	    if( empty($items) ) {
+	    if( empty($data) ) {
 			$this->set_error( 3, 'No items found in database' );
 			return;		    
 	    }
 	    
 	    /* parse the query items */
-			$parsed = $this->model_response_parser($items, $this->properties->data_package_fields);
+		$parsed = $this->model_response_parser($data, $this->properties->data_package_fields);
 			
-		/* return a multimensial array when read all models was requested */
+		/* return a multidimensial array when read-all-models was requested or a single array when only one model was requested*/
     	if($this->id)
 			return $parsed[0];
 	    else
@@ -867,8 +1057,17 @@ abstract class BB_WP_API_Handler {
 	 * @param mixed $data
 	 * @return mixed
 	 */
-	protected function parse_model_response_create($data) {    
-		return $data;	    			        
+	protected function parse_model_response_create($id) {   
+					
+		/* use a new instance of this handler to fetch the new saved model */
+		/* we could simply return the new model id only to backbone, 
+		 * but like this backbone receives the complete wordpress object including all read-only fields also
+		 */
+		$handlername = get_class($this);
+ 		$handler = new $handlername;
+ 		$handler->read($id);
+		$parsed = $handler->get_response(); // dont send the response, only get it
+		return $parsed;	    			        
     }
     
 	/**
@@ -881,9 +1080,15 @@ abstract class BB_WP_API_Handler {
 	 * @param mixed $data
 	 * @return mixed
 	 */
-	protected function parse_model_response_update($data) {	    
-		return $data;	    			        
-    }
+	protected function parse_model_response_update($id) {	 
+	   
+		/* use a new instance of this handler to fetch the updated model */
+		$handlername = get_class($this);
+ 		$handler = new $handlername;
+ 		$handler->read($id);
+		$parsed = $handler->get_response();
+		return $parsed;	      
+	}
 	
 	/**
 	 * parse_model_response_delete function.
@@ -895,8 +1100,10 @@ abstract class BB_WP_API_Handler {
 	 * @param mixed $data
 	 * @return mixed
 	 */
-	protected function parse_model_response_delete($data) {	    
-		return $data;	    			        
+	protected function parse_model_response_delete($id) {	
+	
+		/* only return the deleted id  */
+		return array($this->properties->id_attribute => $id);	    			        
     }
 	
  	/* ===============
@@ -911,7 +1118,7 @@ abstract class BB_WP_API_Handler {
 	 * adds custom data packages to the result
 	 * sets the $this->query
 	 *
-	 * @TODO datapackage could have the same name as value of the post/comment, prevent this
+	 * @TODO datapackage could theoretically have the same name as value of the post/comment, avoid this
 	 * @access protected
 	 * @return array
 	 */
@@ -919,20 +1126,39 @@ abstract class BB_WP_API_Handler {
 		
 		$item = array();
 		
-		/* gets the object according to the classes modelclass from server */
+		/* gets the object according to the modelclass from server */
 		switch( $this->properties->modelclass ) {
 			case('post'):
-				$found_item = get_post($this->id);			
+			case('attachment'):
+				$found_item = get_post($this->id);	
+				$found_item = $this->filter_found_item($found_item);
 				$item['post'] = $found_item;
 			break;
 			case('comment'):
 				$found_item = get_comment( $this->id ); 
+				$found_item = $this->filter_found_item($found_item);
 				$item['comment'] = $found_item;
 			break;
+			case('user'):
+				$found_item = get_user_by( 'id', $this->id );
+				$found_item = $this->filter_found_item($found_item); 
+				$item['user'] = $found_item;			//@TODO
+			break;
+			case('idone'):
+				$found_item = 1; // experimental
+				$item['idone'] = (object) array('idone' => true); // an empty object			
+			break;
 		}
-			
+		if ( ! $found_item ) {
+			$this->set_error( 500, 'query returned false' );
+			return false;
+		}
+		
+		/* the incoming data from request, pass it to the package data handler, the request data might be useful there */
+		$modelrequest = $this->parsed_model_request;
+		
 		/* get custom data packkages */
-		$custom_data = $this->_action_custom_package_data( $found_item);
+		$custom_data = $this->_action_custom_package_data( $found_item, $modelrequest);
 			
 		/* merge core data_packages with custom_data packages */
 		$item = array_merge($item, $custom_data );	
@@ -945,10 +1171,7 @@ abstract class BB_WP_API_Handler {
 		 *								),
 		 *   	'postmeta'			=> array(...),
 		 *  );
-		 */
-		
-		
-		
+		 */			
 		
 		/* set class var */
 		$this->query = array($item); // an  array with one item
@@ -970,10 +1193,21 @@ abstract class BB_WP_API_Handler {
 	protected function _query_all() {
 				
 		/* set the default query args */
+		$default_queryargs = array();
 		switch( $this->properties->modelclass ) {
 			case('post'):
 				$default_queryargs = array(
 					'post_type' 		=> 'post',			
+					'posts_per_page'	=> -1,
+					'orderby'			=> 'ID',
+					'order'				=> 'ASC',
+					'suppress_filters'	=> false				
+				);
+			break;
+			case('attachment'):
+				$default_queryargs = array(
+					'post_type' 		=> 'attachment',	
+					'post_status'		=> 'any',
 					'posts_per_page'	=> -1,
 					'orderby'			=> 'ID',
 					'order'				=> 'ASC',
@@ -985,41 +1219,80 @@ abstract class BB_WP_API_Handler {
 					'order'				=> 'ASC',
 				);
 			break;
+			case('user'):
+				$default_queryargs = array(
+					'role'         => '',
+					'meta_key'     => '',
+					'meta_value'   => '',
+					'meta_compare' => '',
+					'meta_query'   => array(),
+					'include'      => array(),
+					'exclude'      => array(),
+					'orderby'      => 'login',
+					'order'        => 'ASC',
+					'offset'       => '',
+					'search'       => '',
+					'number'       => '',
+					'count_total'  => false,
+					'fields'       => 'all',
+					'who'          => ''
+				);
+			break;
+			case('idone'):
+				$this->set_error( 500, 'One Id modelclass is not supported without id, this error cant even run :)');
+				return array();	
+			break;
 		}
 		
-		/* add request query args */
+		/* merge in query args from the request */
 		$queryargs = array_merge($default_queryargs, $this->request_query_vars);
 		
-		/* filter args, add more query args from the child class */
+		/* filter args, add more query args from the extended class if desired */
 		$queryargs = $this->filter_query_args($queryargs);
 
 		// call database	
 		$found_items = array();	
 		switch( $this->properties->modelclass ) {
 			case('post'):
+			case('attachment'):
 				$found_items = get_posts( $queryargs );
 			break;
 			case('comment'):
 				$found_items = get_comments( $queryargs );
 			break;
+			case('user'):
+				$found_items = get_users($queryargs);
+			break;
+		}
+		
+		if ( empty($found_items) ) {
+			$this->set_error( 500, 'query is empty' );
+			return false;
 		}
 		
 		/* get custom_package data and populate the result */
 		$items = array();
 		
 		for ( $i = 0; $i < count($found_items); $i++ ) {
+			
+			$found_items[$i] = $this->filter_found_item($found_items[$i]);
+			
 			switch( $this->properties->modelclass ) {
 				case('post'):
+				case('attachment'):
 					$items[$i]['post'] = $found_items[$i];    			
 				break;
 				case('comment'):
 					$items[$i]['comment'] = $found_items[$i];				
 				break;
+				case('user'):
+					$items[$i]['user'] = $found_items[$i];				
+				break;
 			}
-			
+							
 			/* get custom data packkages */
-			$custom_data = $this->_action_custom_package_data( $found_items[$i] );
-			
+			$custom_data = $this->_action_custom_package_data( $found_items[$i] );			
+
 			/* merge core data_packages with custom_data packages */
 			$items[$i] = array_merge($items[$i], $custom_data );			
 		}
@@ -1077,8 +1350,8 @@ abstract class BB_WP_API_Handler {
 	/**
 	 * _action_custom_package_data function.
 	 * 
-	 * subject must be a WP object on action read
-	 * subject must be an WP object ID on create, update, delete
+	 * subject must be a WP object on action: read
+	 * subject must be an WP object-ID on create, update, delete
 	 * processes the request with all custom data package handlers
 	 * uses the $this->request_method to decide if create, read, update or delete
 	 * returns the result from the handlers
@@ -1102,23 +1375,52 @@ abstract class BB_WP_API_Handler {
 				$result = array();				
 				switch ($this->request_method) {
 					case 'read':
-						 $result =$handler->read($subject);
+						 $result = $handler->read($subject, $data[$data_package_name]);
 					break;				
 					case 'create':	
-						 $result =$handler->create($subject, $data[$data_package_name]);
+						 $result = $handler->create($subject, $data[$data_package_name]);
 					break;
 					case 'update':
-						 $result =$handler->update($subject, $data[$data_package_name]);
+						 $result = $handler->update($subject, $data[$data_package_name]);
 					break;
 					case 'delete':
-						 $result =$handler->delete($subject);
+						 $result = $handler->delete($subject);
 					break;
+				}
+				
+				/* throw an error if an error object is returned by the handler */
+				if( is_wp_error($result) ) {
+					$this->merge_errors($result);	
 				}
 				/* prepare the output */
 				$custom_data[$data_package_name] = $result;
 			}
 		}		
 		return $custom_data;
+	}
+	
+	/**
+	 * _find_in_request function.
+	 * 
+	 * look for an attribute in the model request first, then in the root request
+	 *
+	 * @access protected
+	 * @param mixed $attribute
+	 * @return void
+	 */
+	protected function _find_in_request($attribute) {
+		
+		/* search for a model id, set it when we have one */
+		$maybe_value_1 = $this->request['model'][$attribute];
+		if( NULL !== $maybe_value_1)
+			return $maybe_value_1;
+		
+		$maybe_value_2 = $this->request[$attribute];		
+		if(  NULL !== $maybe_value_2) 
+			return $maybe_value_2;	
+		
+		if(  'idone' == $this->properties->modelclass) 
+			return 1; // id_one is allways 1				
 	}	
 
  	/* ===============
