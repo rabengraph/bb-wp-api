@@ -112,7 +112,7 @@ class BB_WP_API {
 	}
 
 	/**
-	 * set_id function.
+	 * set_name function.
 	 *
 	 * give every api an id string
 	 * 
@@ -120,11 +120,11 @@ class BB_WP_API {
 	 * @param string $id
 	 * @return string | false
 	 */
-	public function set_id( $id ) {
-		if( ! is_string($id))
+	public function set_name( $name ) {
+		if( ! is_string($name))
 			return false;
-		$this->id = esc_attr($id);
-			return $this->id;	
+		$this->name = esc_attr($name);
+			return $this->name;	
 	}
 	
 	/**
@@ -192,7 +192,7 @@ class BB_WP_API {
 				
 			}
 		}			  	
-		wp_localize_script( 'backbone', 'belTExternalVars_' . $this->id , $java_vars);  		
+		wp_localize_script( 'backbone', 'belTExternalVars_' . $this->name , $java_vars);  		
 	}
 	
 	/**

@@ -1131,7 +1131,7 @@ abstract class BB_WP_API_Handler {
 			case('post'):
 			case('attachment'):
 				$found_item = get_post($this->id);	
-				$found_item = $this->filter_found_item($found_item);
+				$found_item = $this->filter_found_item($found_item); // can be used for escaping values
 				$item['post'] = $found_item;
 			break;
 			case('comment'):
