@@ -15,6 +15,7 @@ Set up an instance of the API:
 			   
  
 Set up a backbone model: 
+
 	// belT is a micro framework to implement the wordpress api functionality
     WordpressPage = belT.Backbone.Model.extend({
     		
