@@ -93,4 +93,11 @@ Save a model serverside:
 		myMetaValue: 'My meta value'
 	};
 	model.save(savedata);
+	
+Get a page with the id 21 from the server:
 
+	var model;
+	model = new WordpressPage({
+		id: 21
+	});
+	model.fetch(); 
