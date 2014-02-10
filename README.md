@@ -94,7 +94,7 @@ Save a model serverside:
 	};
 	model.save(savedata);
 	
-Get a page with the id 21 from the server:
+Get a wordpress page with the id 21 from the server:
 
 	var model;
 	model = new WordpressPage({
