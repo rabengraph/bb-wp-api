@@ -21,7 +21,7 @@ Set up a backbone model:
     	// sent to the server to identify the api instance and api handler
     	api: {
     		name: 'my_api_identifier_string',
-    		handler: 'review'
+    		handler: 'mypages' // routes to the custom handler: BB_WP_API_Handler_Mypages 
     	},		
     	
     	defaults: {
@@ -53,17 +53,17 @@ Set up a custom handler:
 			$register->modelclass('post');
 			$register->data_package('postmeta');
 					
-			$register->field_id('id', 'ID', 'post');
+			$register->field_id('id', 'ID', 'post'); // backbone key, wordpress key, modelclass
 			$register->field('title', 'post_title', 'post', array('validate' => 'esc_attr'));
 			$register->field('content', 'post_content', 'post');
 			$register->field('date', 'post_date', 'post', array('readonly' => true ));
-			$register->field('myMetaValue', 'my_wp_meta_field', 'postmeta');
+			$register->field('myMetaValue', 'my_wp_meta_field', 'postmeta'); // 3rd argument is the name of the package handler
 		}
 		
 		/**
 		 * filter_pre_parse_model_request function.
 		 * 
-		 * default values
+		 * default values for saving models
 		 */
 		protected function filter_pre_parse_model_request( $parsed, $modelmethod ) {
 			
@@ -80,7 +80,9 @@ Set up a custom handler:
 		}
 	}
 
-Example usage via Backbone:
+Example usage via Backbone
+=========
+
 Save a model serverside:
 
 	var model, savedata;
