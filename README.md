@@ -15,7 +15,7 @@ Set up an instance of the API:
 			   
  
 Set up a backbone model: 
-
+	// belT is a micro framework to implement the wordpress api functionality
     WordpressPage = belT.Backbone.Model.extend({
     		
     	// sent to the server to identify the api instance and api handler
@@ -78,6 +78,21 @@ Set up a custom handler:
 			}		
 			return $parsed;
 		}
+		/**
+		 * filter_query_args function.
+		 *
+		 * add some dfault query args
+		 * 
+		 */
+		protected function filter_query_args($queryargs) {
+	
+			$my_queryargs = array(
+				'post_type' 		=> 'page',
+			);		
+			
+			return array_merge( $queryargs, $my_queryargs ) ;
+		}
+
 	}
 
 Example usage via Backbone
