@@ -177,7 +177,7 @@ class BB_WP_API_Registration_Unit {
 	 */
 	public final function access( $access ) {
 		
-		$access_whitelist = array('loggedin', 'all');
+		$access_whitelist = array('loggedin', 'all', 'key');
 		if(in_array($access, $access_whitelist)) {
 			$this->properties->access = $access;		
 		}

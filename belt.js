@@ -80,6 +80,9 @@ var belT = {};
 			// the registered model from wp
 			handler: this.api.handler,
 			
+			// for authentication
+			key: this.api.key,
+			
 			// can be used by collections
 			queryvars: this.api.queryVars,
 			
@@ -115,7 +118,8 @@ var belT = {};
 		api: {
 			name: 'default', // links to the equivalent instance of the api on the server
 			handler: 'post',  //links to the handler on the server
-			queryVars: {},	
+			queryVars: {},
+			key: ''	
 		}, 
 
 		// the response from wp puts the model in an own response object,
@@ -148,7 +152,8 @@ var belT = {};
 		api: {
 			name: 'default', // links to the equivalent instance of the api on the server
 			handler: 'post',  //links to the handler on the server
-			queryVars: {},	
+			queryVars: {},
+			key: ''
 		}, 
 				
 		// see description at model	    

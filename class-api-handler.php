@@ -270,11 +270,6 @@ abstract class BB_WP_API_Handler {
 	 	if( ! $this->properties->modelclass )
 			$this->set_error( 55, 'no valid modelclass registered' );			
 	 		
-	 	/* is the uer allowed to make this request  */
-	 	if ( ( $this->properties->access == "loggedin" ) && ( ! is_user_logged_in() ) ) {
-			$this->set_error( 56, 'user must be logged in for this request' );				 	
-	 	}
-	 	
 		/* request can be set as an constructor argument or via the setter */
 	 	if($request)
 	 		$this->set_request($request);
@@ -313,6 +308,22 @@ abstract class BB_WP_API_Handler {
 		/* looking for model ids in the request */
 		$this->id = $this->_find_in_request($this->properties->id_attribute);
 		$this->parent_id = $this->_find_in_request($this->properties->parent_id_attribute);	
+		
+
+		/* USER HANDLING */
+
+	 	/* is the user allowed to make this request  */
+	 	if ( ( $this->properties->access == "loggedin" ) && ( ! is_user_logged_in() ) ) {
+			$this->set_error( 56, 'user must be logged in for this request' );				 	
+	 	}
+		
+	 	/* some extra authentication */
+	 	/* is the uer allowed to make this request  */
+ 		$allowed = $this->is_authenticated($request, $this->request_method);
+ 		if(! $allowed)
+			$this->set_error( 56, 'user is not authenticated' );				 	
+	 		
+		
 	}	
 	
 	/**
@@ -401,15 +412,16 @@ abstract class BB_WP_API_Handler {
 	 * @return void
 	 */
 	public function read( $id = null ){
-		if($this->get_errors())
-			return;
-		
+
 		/* set method */
 		$this->request_method = 'read';
 		
 		/* read the data from backbone */
 		$this->parse_model_request();
-		
+
+		if($this->get_errors())
+			return;
+				
 		/* set id */
 		if($id)
 			$this->id = $id;
@@ -437,8 +449,6 @@ abstract class BB_WP_API_Handler {
 	 * @return void
 	 */
 	public function create() {
-		if($this->get_errors())
-			return;
 			
 		/* set method */
 		$this->request_method = 'create';
@@ -452,11 +462,14 @@ abstract class BB_WP_API_Handler {
 		/* read the data from backbone */
 		$this->parse_model_request();
 
+		if($this->get_errors())
+			return;
+			
 		/* get the parsed post data from request */
 		$item_data = $this->parsed_model_request;
 
 		/* privileg checking @TODO outsource to filter */
-		if( ! current_user_can('edit_posts')) {  // TODO improve CPT
+		if( $this->properties->access == "loggedin" && ! current_user_can('edit_posts')) {  // TODO improve CPT
 			$this->set_error( 9, 'no user privileges to save the item on server' );
 			return;
 		}	
@@ -542,9 +555,7 @@ abstract class BB_WP_API_Handler {
 	 * @return void
 	 */
 	public function update(){
-		if($this->get_errors())
-			return;
-			
+
 		/* set method */
 		$this->request_method = 'update';
 				
@@ -556,7 +567,10 @@ abstract class BB_WP_API_Handler {
 		
 		/* read the data received from backbone */
 		$this->parse_model_request();
-		
+
+		if($this->get_errors())
+			return;
+					
 		/* get the parsed post data from request */
 		$item_data = $this->parsed_model_request;
 		  			 	
@@ -568,8 +582,8 @@ abstract class BB_WP_API_Handler {
 			case('attachment'):
 				$post = $item_data['post'];
 				
-				/* privileg check */
-				if( ! current_user_can('edit_post', $this->id)) {  
+				/* privileg check */ //improve this for coded api calls, like when setting up bootstrap data (for reading it is no problem any way, because this check is only made for update and create and delete)
+				if( $this->properties->access == "loggedin" && ! current_user_can('edit_post', $this->id)) {  
 					$this->set_error( 11, 'no user privileges to update the item on server' );
 					return;
 				}	
@@ -622,8 +636,6 @@ abstract class BB_WP_API_Handler {
 	 * @return void
 	 */
 	public function delete(){
-		if($this->get_errors())
-			return;
 			
 		/* set method */
 		$this->request_method = 'delete';
@@ -636,7 +648,11 @@ abstract class BB_WP_API_Handler {
 		
 		/* parse the data from backbone */
 		$this->parse_model_request();
-		
+
+
+		if($this->get_errors())
+			return;
+					
 		/* access the parsed post data from request */
 		$item_data = $this->parsed_model_request;		
 		  			 	
@@ -649,7 +665,7 @@ abstract class BB_WP_API_Handler {
 				$post = $item_data['post'];
 				
 				/* privileg check */
-				if( ! current_user_can('delete_post', $this->id)) {  
+				if( $this->properties->access == "loggedin" && ! current_user_can('delete_post', $this->id)) {  
 					$this->set_error( 15, 'no user privileges to delete the item on server' );
 					return;
 				}	
@@ -674,7 +690,7 @@ abstract class BB_WP_API_Handler {
 				/* @TODO better permission handling */
 					$comment_in_db = get_comment( $this->id );
 					$comment_author = $comment_in_db->user_id;
-				if ( $comment_author != $this->current_user->ID ) {
+				if ( $this->properties->access == "loggedin" && $comment_author != $this->current_user->ID ) {
 					$this->set_error( 17, 'This comment can only be deleted by the comment author :' . $comment_author );
 					return;	
 				}
@@ -1065,7 +1081,10 @@ abstract class BB_WP_API_Handler {
 		 */
 		$handlername = get_class($this);
  		$handler = new $handlername;
+ 		if($this->request) $handler->set_request($this->request); // to make the filters apply
+ 		// be aware: the method is still 'create' not 'read'
  		$handler->read($id);
+ 		// now the method was changed to 'read'
 		$parsed = $handler->get_response(); // dont send the response, only get it
 		return $parsed;	    			        
     }
@@ -1085,6 +1104,7 @@ abstract class BB_WP_API_Handler {
 		/* use a new instance of this handler to fetch the updated model */
 		$handlername = get_class($this);
  		$handler = new $handlername;
+  		if($this->request) $handler->set_request($this->request); // to make the filters apply
  		$handler->read($id);
 		$parsed = $handler->get_response();
 		return $parsed;	      
@@ -1421,7 +1441,23 @@ abstract class BB_WP_API_Handler {
 		
 		if(  'idone' == $this->properties->modelclass) 
 			return 1; // id_one is allways 1				
-	}	
+	}
+	
+	
+	protected function is_authenticated($request, $request_method) {
+		
+		return true; // override this in your extended class, and throw errors if you want to restrict access
+		
+		//if(!$request && !$request['key']) {
+		//	$this->set_error( '1001', 'No key submitted');
+		//	return false; 
+		//}
+		
+		
+		
+		// this function must be defined in extended class
+		//return false; // not authenticated
+	}
 
  	/* ===============
 	   ABSTRACT

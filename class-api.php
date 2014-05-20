@@ -60,8 +60,8 @@ class BB_WP_API {
 	 * @var array
 	 * @access private
 	 */
-	private $bootstrap_data = array();
-		
+	private $bootstrap_data = array();
+
 	/**
 	 * errors
 	 * 
