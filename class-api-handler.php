@@ -224,6 +224,16 @@ abstract class BB_WP_API_Handler {
 	 */
 	private $errors = NULL;		
 
+	/**
+	 * cache_time
+	 * 
+	 * overwrite in the extended class
+	 * default is 0 , so no caching
+	 * 
+	 * @var int
+	 * @access private
+	 */
+	protected $cache_time = 0;
 	 
 	/**
 	 * __construct function.
@@ -324,7 +334,54 @@ abstract class BB_WP_API_Handler {
 			$this->set_error( 56, 'user is not authenticated' );				 	
 	 		
 		
+	}
+
+
+	/**
+	 * set_cache function.
+	 * 
+	 * try to get a cache object
+	 *
+	 * @access protected
+	 * @param mixed $value
+	 * @return void
+	 */
+	protected function set_cache($value) {
+    	 set_transient( $this->get_cache_id(), $value, $this->cache_time );     	    	
+	}
+	
+	/**
+	 * get_cache function.
+	 * 
+	 * check strict: return === false
+	 *
+	 * @access private
+	 * @return false or mixed
+	 */
+	protected function get_cache() {
+	
+        // uncomment next line to flush previous cache
+	    //delete_transient($this->get_cache_id());  
+	
+    	return get_transient( $this->get_cache_id() );     	   
 	}	
+	
+	/**
+	 * get_cache_id function.
+	 * 
+	 * make an id with the classname
+	 *
+	 * @access private
+	 * @return void
+	 */
+	private function get_cache_id() {
+        $handlername = get_class($this);
+        if($this->id)
+            $cache_id = '_cache_' . $handlername . '_' . $this->id;
+        else 
+            $cache_id = '_cache_' . $handlername . '_all';  
+        return $cache_id;
+	}
 	
 	/**
 	 * set_error function.
@@ -425,13 +482,21 @@ abstract class BB_WP_API_Handler {
 		/* set id */
 		if($id)
 			$this->id = $id;
-			
+
+		/* when caching is enabled, try to get the cache */
+		if($this->cache_time && false !== $this->get_cache()) {
+            $query = $this->get_cache();
+            $this->query = $query;
+
 		/* call the database query */
-		if($this->id) 
-			$query = $this->_query_single();
-		else
-			$query = $this->_query_all();
-					
+		} else {
+    		if($this->id) 
+    			$query = $this->_query_single();
+    		else
+    			$query = $this->_query_all();					    		
+		}
+			
+
 		/* format the retrieved models */
 		$this->parse_model_response($query);	
 	}
@@ -1192,6 +1257,12 @@ abstract class BB_WP_API_Handler {
 		 *   	'postmeta'			=> array(...),
 		 *  );
 		 */			
+
+
+		/* when caching is enabled, set the cache */
+		if($this->cache_time) {
+            $this->set_cache(array($item));
+		}
 		
 		/* set class var */
 		$this->query = array($item); // an  array with one item
@@ -1328,6 +1399,14 @@ abstract class BB_WP_API_Handler {
 		 *  			array(...),
 		 *			);
 		 */
+		 
+		 
+		/* when caching is enabled, set the cache */
+		if($this->cache_time) {
+            $this->set_cache($items);
+		}
+		
+		/* return */
 		$this->query = $items;
 		return $items;
 	}
