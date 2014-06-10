@@ -110,7 +110,7 @@ class BB_WP_API_Handler_Data_Package_Postmeta extends BB_WP_API_Handler_Data_Pac
 		$meta = get_post_custom( $object->ID );
 		if( ! empty($meta)) {
 			foreach ($meta as $k => $v) {
-				$meta[$k] = $v[0];
+				$meta[$k] = maybe_unserialize($v[0]) ;
 			}
 		}
 		return $meta;
