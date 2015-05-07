@@ -1,0 +1,16 @@
+{
+    "name": "bb-wp-api",
+    "type": "wordpress-plugin",
+    "description": "Backbone Wordpress API",
+    "version":"0.4",
+    "authors": [
+    		{
+    			"name": "Simon Radner"
+    		}
+    	],
+    "require": {
+        "php": ">=5.3.2",
+        "wordpress": ">=3.8",
+        "composer/installers": "v1.0.6"
+    }
+}
