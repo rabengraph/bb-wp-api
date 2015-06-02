@@ -61,7 +61,21 @@ class BB_WP_API {
 	 * @access private
 	 */
 	private $bootstrap_data = array();
-
+  
+  
+  /**
+   * backbone_js
+   * 
+   * belT and backbone and a global JS Object is loaded when set to true
+   *
+   * (default value: true)
+   * 
+   * @var bool
+   * @access private
+   */
+  private $backbone_js = true;
+  
+  
 	/**
 	 * errors
 	 * 
@@ -105,10 +119,13 @@ class BB_WP_API {
 		/* start listening on ajax port */
 		add_action ( 'wp_ajax_' . $this->actionname, array($this,'listen') );
 		add_action ( 'wp_ajax_nopriv_' . $this->actionname, array($this,'listen') );
-	
-		/* adds js backbone extension and passes some vars to */
-		add_action ( 'wp_enqueue_scripts', array($this,'register_javascript') );
-				
+    
+    if( $this->backbone_js ) {
+  		/* adds js backbone extension and passes some vars to */
+  		add_action ( 'wp_enqueue_scripts', array($this,'register_backbone_javascript') );		      
+    }
+    
+    add_action( 'wp_head', array( $this, 'print_vars' ));
 	}
 
 	/**
@@ -142,6 +159,19 @@ class BB_WP_API {
 		$this->actionname = esc_attr($name);
 			return $this->actionname;	
 	}
+
+	/**
+	 * unset_backbone function.
+	 * 
+	 * disable Backbone
+	 *
+	 * @access public
+	 * @return void
+	 */
+	public function unset_backbone() {
+		$this->backbone_js = false;
+	}
+	
 	
 	/**
 	 * set_bootstrap_data function.
@@ -166,7 +196,7 @@ class BB_WP_API {
 	}
 		
 	/**
-	 * register_javascript function.
+	 * register_backbone_javascript function.
 	 *
 	 * also passes important vars to js
 	 * 
@@ -174,25 +204,27 @@ class BB_WP_API {
 	 * @access public
 	 * @return void
 	 */
-	public function register_javascript() {
+	public function register_backbone_javascript() {
 			
 		/* backbone js extension */
-		wp_enqueue_script( 'belT', plugins_url( '/belt.js' , BB_WP_API_FILE ) ,  array( 'jquery', 'backbone') );
-		
-		/* set some public vars for being accessable in bb */
-		$java_vars =  array( 
-						'ajaxUrl' 			=> admin_url( 'admin-ajax.php'),
-						'action'			=> $this->actionname
-					  );
-					  
-		/* include bootstrapdata if any set */
-		if($this->bootstrap_data) {
-			foreach ($this->bootstrap_data as $name => $record) {
-				$java_vars[$name] = $record;			
-				
-			}
-		}			  	
-		wp_localize_script( 'backbone', 'belTExternalVars_' . $this->name , $java_vars);  		
+		wp_enqueue_script( 'belT', plugins_url( '/belt.js' , BB_WP_API_FILE ) ,  array( 'jquery', 'backbone') );		  	
+		wp_localize_script( 'backbone', 'belTExternalVars_' . $this->name , $this->get_js_vars());  		
+	}
+	
+	public function print_vars() { ?>
+  	
+		<script type='text/javascript'>
+		/* <![CDATA[ */
+  
+    var BB_WP_API = BB_WP_API || {};
+    BB_WP_API.instances = BB_WP_API.instances || {};
+    
+    BB_WP_API.instances['<?php echo $this->name;?>'] = <?php echo json_encode( $this->get_js_vars());?>
+    
+		/* ]]> */
+		</script>
+
+  <?php
 	}
 	
 	/**
@@ -223,7 +255,17 @@ class BB_WP_API {
 			
 		/* gets an handler or throws an error		 */
 		$handler = $this->_maybe_get_valid_handler($handler);
-							
+			
+		// the model data can also be sent over payload	
+		if ( isset( $_REQUEST['payload'] )) {
+      $request_body = file_get_contents('php://input');
+      $payload = json_decode($request_body, true); // true for an associative array, not an object
+      $_REQUEST['model'] = $payload['model'];			  		
+      if( isset( $payload['queryvars'] ) && ! empty( $payload['queryvars'] )) {
+        $_REQUEST['queryvars'] = $payload['queryvars'];			  		      
+      }
+		}	
+					
 		/* all tests passed, now call the handler */
 		if( ! $this->get_errors() ) {
 			
@@ -375,7 +417,33 @@ class BB_WP_API {
 		$parse = array_map("strtolower", $parse);
 		return  implode('-', $parse);			
 	}
-		
+
+  /**
+   * get_js_vars function.
+   * 
+   * an array with all JS vars
+   *
+   * @access private
+   * @return array
+   */
+  private function get_js_vars() {
+    
+		/* set some public vars for being accessable in bb */
+	  $java_vars =  array( 
+					'ajaxUrl' 			=> admin_url( 'admin-ajax.php'),
+					'action'			=> $this->actionname
+    );
+				  
+		/* include bootstrapdata if any set */
+		if($this->bootstrap_data) {
+			foreach ($this->bootstrap_data as $name => $record) {
+				$java_vars[$name] = $record;			
+				
+			}
+		}
+		return $java_vars;
+  }
+
 	/**
 	 * get_current_url function.
 	 * 
