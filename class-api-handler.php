@@ -182,7 +182,16 @@ abstract class BB_WP_API_Handler {
 	 * @access protected
 	 */
 	protected $query = array();
- 	 
+ 	
+ 	/**
+ 	 * wp_query
+ 	 * 
+ 	 * the instance of the WP_Query
+ 	 * 
+ 	 * @var mixed
+ 	 * @access protected
+ 	 */
+ 	protected $wp_query = null;
 	/**
 	 * parsed_model_response
 	 * 
@@ -833,7 +842,17 @@ abstract class BB_WP_API_Handler {
 		if($this->get_errors()) {
 			wp_send_json_error($return);						
 		} else {
-			wp_send_json_success($return);			
+  		if( null === $this->wp_query ) {
+  			wp_send_json_success($return);  		 		
+  		} else {
+    		
+  			$data = array(
+    			'success' => true,
+    			'data'    => $return,
+    			'query'   => $this->parse_wp_query_object_2_js( $this->wp_query )
+  			);
+  			wp_send_json($data); // build a custom wp_send_json_success with an extra property 
+  		}			
 		}
 	} 
 	
@@ -1190,6 +1209,36 @@ abstract class BB_WP_API_Handler {
 		/* only return the deleted id  */
 		return array($this->properties->id_attribute => $id);	    			        
     }
+  
+  /**
+   * parse_wp_query_object_2_js function.
+   * 
+   * @access protected
+   * @param \WP_Query $wpQuery
+   * @return void
+   */
+  protected function parse_wp_query_object_2_js( \WP_Query $wpQuery ) {
+
+    $page = $wpQuery->get( 'page' );
+    if( ! $page )
+      $page = $wpQuery->get( 'paged' );
+    if( ! $page )
+      $page = 1;
+    
+    $offset = $wpQuery->get( 'offset' );
+    if( ! $offset )
+      $offset = 0;
+
+    $js_object =  array(
+      'page'  => $page,
+      'pages' => $wpQuery->max_num_pages,
+      'count' => $wpQuery->post_count,
+      'found' => $wpQuery->found_posts,
+      'offset'  => $offset
+    );
+    
+    return $js_object;
+  } 
 	
  	/* ===============
 	   HELPER
@@ -1290,6 +1339,7 @@ abstract class BB_WP_API_Handler {
 				$default_queryargs = array(
 					'post_type' 		=> 'post',			
 					'posts_per_page'	=> -1,
+					'post_status'		=> 'publish',
 					'orderby'			=> 'ID',
 					'order'				=> 'ASC',
 					'suppress_filters'	=> false				
@@ -1346,7 +1396,11 @@ abstract class BB_WP_API_Handler {
 		switch( $this->properties->modelclass ) {
 			case('post'):
 			case('attachment'):
-				$found_items = get_posts( $queryargs );
+			  $wpQuery = new \WP_Query($queryargs);
+			  $this->wp_query = $wpQuery;
+			  if( $wpQuery->have_posts()) {
+  				$found_items = $wpQuery->posts;  			  
+			  }	  
 			break;
 			case('comment'):
 				$found_items = get_comments( $queryargs );
