@@ -1133,7 +1133,7 @@ abstract class BB_WP_API_Handler {
 /* 	    $items = $this->query; */
 	    /* error checks */
 	    if( empty($data) ) {
-			$this->set_error( 3, 'No items found in database' );
+			// $this->set_error( 3, 'No items found in database' );
 			return;		    
 	    }
 	    
@@ -1411,8 +1411,8 @@ abstract class BB_WP_API_Handler {
 		}
 		
 		if ( empty($found_items) ) {
-			$this->set_error( 500, 'query is empty' );
-			return false;
+			//$this->set_error( 500, 'query is empty' );
+			//return false;
 		}
 		
 		/* get custom_package data and populate the result */
