@@ -3,7 +3,7 @@
  * Plugin Name: Backbone Wordpress API
  * Plugin URI: 
  * Description: Backbone Wordpress API, provides an api to connect backbone requests with the wordpress
- * Version: 0.4
+ * Version: 0.5
  * Author: Sef
  * Author URI: 
  * License: 
