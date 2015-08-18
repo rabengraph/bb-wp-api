@@ -577,7 +577,12 @@ abstract class BB_WP_API_Handler {
 				}
 				
 				/* upload the file ($_FILE) and attach it to the parent post			 */
-				$new_id = media_handle_upload('async-upload', $this->parent_id, $attachment);		
+				$result = media_handle_upload('async-upload', $this->parent_id, $attachment);		
+        if ( is_wp_error( $result )) {
+					$this->set_error( 8, 'saving the attachment failed on the server' );        
+         return; 
+        }
+				$new_id = $result;		
 			break;
 			
 			/* comment */
