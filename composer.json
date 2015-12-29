@@ -2,7 +2,7 @@
     "name": "bb-wp-api",
     "type": "wordpress-plugin",
     "description": "Backbone Wordpress API",
-    "version":"0.5.1",
+    "version":"0.5.2",
     "authors": [
     		{
     			"name": "Simon Radner"

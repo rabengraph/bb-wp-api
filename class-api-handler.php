@@ -508,6 +508,9 @@ abstract class BB_WP_API_Handler {
 
 		/* format the retrieved models */
 		$this->parse_model_response($query);	
+		
+    do_action('bb-wp-api_after_read', $this->id, $this->properties, $this );
+
 	}
 	 
 	/**
@@ -622,6 +625,7 @@ abstract class BB_WP_API_Handler {
 		
 		/* set a clean response */
 		$this->parse_model_response($new_id);	
+    do_action('bb-wp-api_after_create', $new_id, $this->properties, $this );
 	}
 	
 	/**
@@ -700,9 +704,11 @@ abstract class BB_WP_API_Handler {
 			case('idone'):
 				$new_id = $this->id;
 				$this->_action_custom_package_data( $new_id, $item_data);					
-				$this->parse_model_response($new_id);			
+				$this->parse_model_response($new_id);		
 			break;
-		}	
+		}
+    do_action('bb-wp-api_after_update', $updated_id, $this->properties, $this );
+	
 	}
 	
 	/**
@@ -793,6 +799,8 @@ abstract class BB_WP_API_Handler {
 				$this->parse_model_response($new_id);			
 			break;
 		}	
+    do_action('bb-wp-api_after_upd', $updated_id, $this->properties, $this );
+
 	}
 
 	/**
